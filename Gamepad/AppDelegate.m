@@ -1,0 +1,23 @@
+//
+//  AppDelegate.m
+//  Gamepad
+//
+//  Created by Joseph Gentle on 5/04/13.
+//
+//
+
+#import "AppDelegate.h"
+
+@implementation AppDelegate
+
+- (void)dealloc
+{
+    [super dealloc];
+}
+
+- (void)applicationDidFinishLaunching:(NSNotification *)aNotification
+{
+  // Insert code here to initialize your application
+}
+
+@end
