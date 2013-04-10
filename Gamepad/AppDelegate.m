@@ -7,6 +7,7 @@
 //
 
 #import "AppDelegate.h"
+#import "GamepadWatcher.h"
 
 @implementation AppDelegate
 
@@ -17,7 +18,9 @@
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification
 {
-  // Insert code here to initialize your application
+  watcher = [[GamepadWatcher alloc] init];
+  watcher.delegate = self;
+  [watcher listen];
 }
 
 @end

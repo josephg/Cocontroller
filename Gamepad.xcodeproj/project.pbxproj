@@ -13,6 +13,8 @@
 		FD0213C2170FB7360059D41E /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = FD0213C0170FB7360059D41E /* Credits.rtf */; };
 		FD0213C5170FB7360059D41E /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = FD0213C4170FB7360059D41E /* AppDelegate.m */; };
 		FD0213C8170FB7360059D41E /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = FD0213C6170FB7360059D41E /* MainMenu.xib */; };
+		FD0213D0170FB76A0059D41E /* GamepadWatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = FD0213CF170FB76A0059D41E /* GamepadWatcher.m */; };
+		FD0213D2170FB8900059D41E /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FD0213D1170FB8900059D41E /* IOKit.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -29,6 +31,9 @@
 		FD0213C3170FB7360059D41E /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		FD0213C4170FB7360059D41E /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
 		FD0213C7170FB7360059D41E /* en */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = en; path = en.lproj/MainMenu.xib; sourceTree = "<group>"; };
+		FD0213CE170FB76A0059D41E /* GamepadWatcher.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = GamepadWatcher.h; sourceTree = "<group>"; };
+		FD0213CF170FB76A0059D41E /* GamepadWatcher.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GamepadWatcher.m; sourceTree = "<group>"; };
+		FD0213D1170FB8900059D41E /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOKit.framework; path = System/Library/Frameworks/IOKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -36,6 +41,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FD0213D2170FB8900059D41E /* IOKit.framework in Frameworks */,
 				FD0213B2170FB7360059D41E /* Cocoa.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -46,6 +52,7 @@
 		FD0213A5170FB7360059D41E = {
 			isa = PBXGroup;
 			children = (
+				FD0213D1170FB8900059D41E /* IOKit.framework */,
 				FD0213B7170FB7360059D41E /* Gamepad */,
 				FD0213B0170FB7360059D41E /* Frameworks */,
 				FD0213AF170FB7360059D41E /* Products */,
@@ -84,6 +91,8 @@
 			children = (
 				FD0213C3170FB7360059D41E /* AppDelegate.h */,
 				FD0213C4170FB7360059D41E /* AppDelegate.m */,
+				FD0213CE170FB76A0059D41E /* GamepadWatcher.h */,
+				FD0213CF170FB76A0059D41E /* GamepadWatcher.m */,
 				FD0213C6170FB7360059D41E /* MainMenu.xib */,
 				FD0213B8170FB7360059D41E /* Supporting Files */,
 			);
@@ -167,6 +176,7 @@
 			files = (
 				FD0213BE170FB7360059D41E /* main.m in Sources */,
 				FD0213C5170FB7360059D41E /* AppDelegate.m in Sources */,
+				FD0213D0170FB76A0059D41E /* GamepadWatcher.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

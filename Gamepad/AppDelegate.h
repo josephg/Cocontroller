@@ -7,8 +7,11 @@
 //
 
 #import <Cocoa/Cocoa.h>
+#import "GamepadWatcher.h"
 
-@interface AppDelegate : NSObject <NSApplicationDelegate>
+@interface AppDelegate : NSObject <NSApplicationDelegate, GamepadWatcherDelegate> {
+  GamepadWatcher *watcher;
+}
 
 @property (assign) IBOutlet NSWindow *window;
 
