@@ -7,6 +7,7 @@
 //
 
 #import "GamepadWatcher.h"
+#import "StandardGamepad.h"
 
 #import <IOKit/IOKitLib.h>
 #import <IOKit/IOCFPlugIn.h>
@@ -16,6 +17,11 @@
 
 #define READ_ENDPOINT 1
 #define CONTROL_ENDPOINT 2
+
+// From http://msdn.microsoft.com/en-us/library/windows/desktop/ee417001(v=vs.85).aspx#dead_zone
+#define XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE  7849
+#define XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE 8689
+#define XINPUT_GAMEPAD_TRIGGER_THRESHOLD    30
 
 typedef enum {
   CONTROL_MESSAGE_SET_RUMBLE = 0,
@@ -33,6 +39,117 @@ typedef enum {
   STATUS_MESSAGE_RUMBLE = 3,
 } XBOXStatusMessageType;
 
+struct XBOXButtonData {
+  // 00 back start - 0000
+  int dpadUp :1;
+  int dpadDown :1;
+  int dpadLeft :1;
+  int dpadRight :1;
+  
+  int start :1;
+  int back :1;
+  int stickLeftClick :1;
+  int stickRightClick :1;
+  
+  int bumperLeft :1;
+  int bumperRight :1;
+  int xboxButton :1;
+  int unused :1;
+  
+  int a :1;
+  int b :1;
+  int x :1;
+  int y :1;
+  
+  UInt8 triggerLeft :8;
+  UInt8 triggerRight :8;
+
+  // This is not endian safe, but all macs are now little endian anyway so it doesn't matter
+  // so much.
+  SInt16 stickLeftX :16;
+  SInt16 stickLeftY :16;
+  
+  SInt16 stickRightX :16;
+  SInt16 stickRightY :16;
+  
+  // There's 6 more bytes, but they're all zero.
+} __attribute__((packed));
+typedef struct XBOXButtonData XBOXButtonData;
+
+static float normalizeXBoxTrigger(UInt8 value) {
+  if (value < XINPUT_GAMEPAD_TRIGGER_THRESHOLD) {
+    return 0;
+  } else {
+    return (float)(value - XINPUT_GAMEPAD_TRIGGER_THRESHOLD) / (UINT8_MAX - XINPUT_GAMEPAD_TRIGGER_THRESHOLD);
+  }
+}
+
+// From http://msdn.microsoft.com/en-us/library/windows/desktop/ee417001(v=vs.85).aspx#dead_zone
+static void normalizeXBoxAxis(SInt16 x, SInt16 y, SInt16 deadzone, float *x_out, float *y_out) {
+  float LX = (float)x;
+  float LY = (float)y;
+  
+  //determine how far the controller is pushed
+  float realMagnitude = sqrtf(LX*LX + LY*LY);
+    
+  //check if the controller is outside a circular dead zone
+  if (realMagnitude > deadzone)
+  {
+    //clip the magnitude at its expected maximum value
+    float magnitude = realMagnitude > 32767 ? 32767 : realMagnitude;
+    
+    //adjust magnitude relative to the end of the dead zone
+    magnitude -= deadzone;
+
+    //optionally normalize the magnitude with respect to its expected range
+    //giving a magnitude value of 0.0 to 1.0
+//    normalizedMagnitude = magnitude / (32767 - INPUT_DEADZONE);
+    float ratio = (magnitude / (32767 - deadzone)) / realMagnitude;
+    
+    *x_out = LX * ratio;
+    *y_out = LY * ratio;
+  }
+  else //if the controller is in the deadzone zero out the magnitude
+  {
+    *x_out = *y_out = 0.0f;
+  }
+}
+
+StandardGamepadData standardize360Data(XBOXButtonData xbox) {
+  StandardGamepadData data;
+  data.button[BUTTON_PAD_BOTTOM] = xbox.a;
+  data.button[BUTTON_PAD_RIGHT] = xbox.b;
+  data.button[BUTTON_PAD_TOP] = xbox.y;
+  data.button[BUTTON_PAD_LEFT] = xbox.x;
+
+  data.button[BUTTON_BUMPER_LEFT] = xbox.bumperLeft;
+  data.button[BUTTON_BUMPER_RIGHT] = xbox.bumperRight;
+  
+  data.button[BUTTON_TRIGGER_LEFT] = normalizeXBoxTrigger(xbox.triggerLeft);
+  data.button[BUTTON_TRIGGER_RIGHT] = normalizeXBoxTrigger(xbox.triggerRight);
+  
+  data.button[BUTTON_CENTER_BACK] = xbox.back;
+  data.button[BUTTON_CENTER_FORWARD] = xbox.start;
+  
+  data.button[BUTTON_STICK_LEFT] = xbox.stickLeftClick;
+  data.button[BUTTON_STICK_RIGHT] = xbox.stickRightClick;
+  
+  data.button[BUTTON_DPAD_UP] = xbox.dpadUp;
+  data.button[BUTTON_DPAD_DOWN] = xbox.dpadDown;
+  data.button[BUTTON_DPAD_LEFT] = xbox.dpadLeft;
+  data.button[BUTTON_DPAD_RIGHT] = xbox.dpadRight;
+  
+  data.button[BUTTON_CENTER] = xbox.xboxButton;
+  
+  
+  normalizeXBoxAxis(xbox.stickLeftX, xbox.stickLeftY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE,
+                    &data.axis[AXIS_LEFT_X], &data.axis[AXIS_LEFT_Y]);
+  normalizeXBoxAxis(xbox.stickRightX, xbox.stickRightY, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE,
+                    &data.axis[AXIS_RIGHT_X], &data.axis[AXIS_RIGHT_Y]);
+  
+  return data;
+}
+
 @implementation Gamepad
 
 @dynamic ledPattern;
@@ -47,15 +164,34 @@ typedef enum {
   }
   
   switch (type) {
-    case STATUS_MESSAGE_BUTTONS:
-      for (int i = 2; i < length; i++) {
-        printf("%2x ", (unsigned char)_read_buffer[i]);
+    case STATUS_MESSAGE_BUTTONS: {
+      XBOXButtonData data;
+      if (length < sizeof(XBOXButtonData) + 2) {
+        NSLog(@"Invalid size");
+        return;
       }
-      printf("\n");
+      memcpy(&data, &_read_buffer[2], sizeof(XBOXButtonData));
+      
+      StandardGamepadData standard = standardize360Data(data);
+      if ([delegate respondsToSelector:@selector(gamepad:gotData:)]) {
+        [delegate gamepad:self gotData:standard];
+      }
+//      printf("%d %f %f (%f)\n", data.stickRightY, standard.axis[2], standard.axis[3], sqrtf(standard.axis[2]*standard.axis[2] + standard.axis[3]*standard.axis[3]));
+      
+//      SInt16 x = ((SInt16)data.stickLeftXHigh << 8)
+//          + data.stickLeftXLow;
+//      printf("%d\n", x);
+//      printf("%d\n", data.stickLeftX);
+      
+//      for (int i = 2; i < length; i++) {
+//        printf("%2x ", (unsigned char)_read_buffer[i]);
+//      }
+//      printf("\n");
       break;
+    }
     case STATUS_MESSAGE_LED:
       _ledPattern = _read_buffer[2];
-      if (delegate && [delegate respondsToSelector:@selector(gamepad:ledStatusKnown:)]) {
+      if ([delegate respondsToSelector:@selector(gamepad:ledStatusKnown:)]) {
         [delegate gamepad:self ledStatusKnown:_ledPattern];
       }
       break;

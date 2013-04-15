@@ -6,6 +6,7 @@
 //
 //
 
+#import "StandardGamepad.h"
 #import <Foundation/Foundation.h>
 
 struct IOUSBInterfaceStruct300;
@@ -49,7 +50,7 @@ typedef enum {
 @protocol GamepadDelegate <NSObject>
 @optional
 - (void)gamepad:(Gamepad *)gamepad ledStatusKnown:(XBOXLedPattern)pattern;
-- (void)gamepad:(Gamepad *)gamepad gotButtonState:(XBOXLedPattern)pattern;
+- (void)gamepad:(Gamepad *)gamepad gotData:(StandardGamepadData)data;
 @end
 
 @interface Gamepad : NSObject {

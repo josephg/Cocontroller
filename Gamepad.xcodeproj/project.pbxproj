@@ -34,6 +34,7 @@
 		FD0213CE170FB76A0059D41E /* GamepadWatcher.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = GamepadWatcher.h; sourceTree = "<group>"; };
 		FD0213CF170FB76A0059D41E /* GamepadWatcher.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GamepadWatcher.m; sourceTree = "<group>"; };
 		FD0213D1170FB8900059D41E /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOKit.framework; path = System/Library/Frameworks/IOKit.framework; sourceTree = SDKROOT; };
+		FD6C340E171BA9D300B59C66 /* StandardGamepad.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = StandardGamepad.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -93,6 +94,7 @@
 				FD0213C4170FB7360059D41E /* AppDelegate.m */,
 				FD0213CE170FB76A0059D41E /* GamepadWatcher.h */,
 				FD0213CF170FB76A0059D41E /* GamepadWatcher.m */,
+				FD6C340E171BA9D300B59C66 /* StandardGamepad.h */,
 				FD0213C6170FB7360059D41E /* MainMenu.xib */,
 				FD0213B8170FB7360059D41E /* Supporting Files */,
 			);
@@ -310,6 +312,7 @@
 				FD0213CD170FB7360059D41E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
