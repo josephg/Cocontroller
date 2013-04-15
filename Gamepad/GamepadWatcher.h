@@ -61,8 +61,13 @@ typedef enum {
   // chatpad and headset) are ignored for now.
   struct IOUSBInterfaceStruct300 **_interf;
   
-  size_t _buffer_size;
-  UInt8 *_buffer;
+  // This will be set to the max packet size reported by the interface, which is 32 bytes.
+  // I would have expected USB to do message framing itself, but somehow we still sometimes
+  // (rarely!) get packets off the interface which aren't correctly framed. The 360 controller
+  // frames its packets with a 2 byte header (type, total length) so we can reframe the packet
+  // data ourselves.
+  UInt16 _read_buffer_size;
+  UInt8 *_read_buffer;
   
   id<GamepadDelegate> delegate;
   

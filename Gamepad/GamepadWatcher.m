@@ -37,67 +37,53 @@ typedef enum {
 
 @dynamic ledPattern;
 
-- (void)processBytes:(char *)bytes ofLength:(UInt32)length {
-  XBOXStatusMessageType type = bytes[0];
-  UInt8 len = bytes[1];
+- (void)readPacketOfLength:(UInt32)length {
+  if (length < 2) return;
+  
+  XBOXStatusMessageType type = _read_buffer[0];
+  if (_read_buffer[1] != length) {
+    NSLog(@"Ignoring fragment");
+    return;
+  }
   
   switch (type) {
     case STATUS_MESSAGE_BUTTONS:
       for (int i = 2; i < length; i++) {
-        printf("%2x ", (unsigned char)bytes[i]);
+        printf("%2x ", (unsigned char)_read_buffer[i]);
       }
       printf("\n");
       break;
     case STATUS_MESSAGE_LED:
-      _ledPattern = bytes[2];
+      _ledPattern = _read_buffer[2];
       if (delegate && [delegate respondsToSelector:@selector(gamepad:ledStatusKnown:)]) {
         [delegate gamepad:self ledStatusKnown:_ledPattern];
       }
       break;
       
     default:
+      NSLog(@"ignoring packet of type %d", type);
       // Ignore!
       break;
   }
-//  if (type != 0) {
-//
-//    printf("weird packet: ");
-//    for (int i = 0; i < length; i++) {
-//      printf("%2x ", (unsigned char)bytes[i]);
-//    }
-//    printf("\n");
-//
-//    // I don't understand what its talking about. Ignore the packet.
-//    return;
-//  }
-//  if (len != 20 || length != 20) {
-//    NSLog(@"Er, weird length. Ignoring.");
-//    return;
-//  }
-//  
-//  for (int i = 2; i < length; i++) {
-//    printf("%2x ", (unsigned char)bytes[i]);
-//  }
-//  printf("\n");
 }
-
-typedef struct {
-  Gamepad *owner;
-  IOUSBInterfaceInterface300 **interf;
-  UInt32 maxPacketSize;
-  int pipe;
-  char bytes[];
-} Transfer;
 
 static void gotData(void *refcon, IOReturn result, void *arg0) {
   UInt32 bytesRead = (UInt32)arg0;
-  Transfer *xfer = (Transfer *)refcon;
+  Gamepad *g = (Gamepad *)refcon;
+
+  // This will happen if the device was disconnected. The gamepad has probably been
+  // destroyed. Ignore the bytes and don't requeue a read.
+  if (result == kIOReturnAborted) return;
+  else if (result != kIOReturnSuccess) {
+    NSLog(@"Error reading gamepad data: %x", result);
+    return;
+  }
   
-  if (result != kIOReturnSuccess) return;
-  [xfer->owner processBytes:xfer->bytes ofLength:bytesRead];
+  [g readPacketOfLength:bytesRead];
   
   // Queue up another read.
-  (*xfer->interf)->ReadPipeAsync(xfer->interf, xfer->pipe, xfer->bytes, xfer->maxPacketSize, gotData, xfer);
+  (*g->_interf)->ReadPipeAsync(g->_interf, READ_ENDPOINT, g->_read_buffer,
+                                 g->_read_buffer_size, gotData, g);
 }
 
 - (id)initWithService:(io_service_t)service {
@@ -211,12 +197,11 @@ static void gotData(void *refcon, IOReturn result, void *arg0) {
       if (i == READ_ENDPOINT) {
         assert(direction == kUSBIn);
         
-        Transfer *xfer = malloc(sizeof(Transfer) + maxPacketSize);
-        xfer->owner = self;
-        xfer->interf = _interf;
-        xfer->pipe = i;
-        xfer->maxPacketSize = maxPacketSize;
-        (*_interf)->ReadPipeAsync(_interf, i, xfer->bytes, maxPacketSize, gotData, xfer);
+        
+        _read_buffer = malloc(maxPacketSize);
+        _read_buffer_size = maxPacketSize;
+        
+        (*_interf)->ReadPipeAsync(_interf, i, _read_buffer, _read_buffer_size, gotData, self);
 
       } else if (i == CONTROL_ENDPOINT) {
         assert(direction == kUSBOut);
