@@ -14,7 +14,6 @@
 #import <IOKit/usb/IOUSBLib.h>
 #import <IOKit/usb/USB.h>
 
-
 @implementation Gamepad
 
 - (void)processBytes:(char *)bytes ofLength:(UInt32)length {
@@ -45,7 +44,7 @@
 
 typedef struct {
   Gamepad *owner;
-  IOUSBInterfaceInterface550 **interf;
+  IOUSBInterfaceInterface300 **interf;
   UInt32 maxPacketSize;
   int pipe;
   char bytes[];
@@ -55,6 +54,16 @@ void gotData(void *refcon, IOReturn result, void *arg0) {
   UInt32 bytesRead = (UInt32)arg0;
   Transfer *xfer = (Transfer *)refcon;
 
+//  UInt8 c, sc, p;
+//  IOUSBInterfaceInterface300 **interf = xfer->interf;
+//  (*interf)->GetInterfaceClass(interf, &c);
+//  (*interf)->GetInterfaceSubClass(interf, &sc);
+//  (*interf)->GetInterfaceProtocol(interf, &p);
+//  
+//  printf("data from pipe %d class %d subclass %d protocol %d", xfer->pipe, c, sc, p);
+  
+
+  
   if (result != kIOReturnSuccess) return;
   [xfer->owner processBytes:xfer->bytes ofLength:bytesRead];
   
@@ -68,129 +77,150 @@ void gotData(void *refcon, IOReturn result, void *arg0) {
     NSLog(@"init gamepad %d", service);
     
     kern_return_t kr;
-    io_name_t name;
-    kr = IORegistryEntryGetName(service, name);
-    if (kr != KERN_SUCCESS) name[0] = '\0';
     
-    NSLog(@"name: %s", name);
+    // name is 'Controller'
+//    io_name_t name;
+//    kr = IORegistryEntryGetName(service, name);
+//    if (kr != KERN_SUCCESS) name[0] = '\0';
+//    
+//    NSLog(@"name: %s", name);
     
+    // First we need to make a PlugInInterface, which we can use in turn to get the DeviceInterface.
     IOCFPlugInInterface **plugin;
-    SInt32 score;
+    SInt32 score; // Unused, but required for IOCreatePlugInInterfaceForService.
     kr = IOCreatePlugInInterfaceForService(service, kIOUSBDeviceUserClientTypeID, kIOCFPlugInInterfaceID, &plugin, &score);
     assert(kr == KERN_SUCCESS);
     
     IOObjectRelease(service);
+    service = 0;
     
-    IOUSBDeviceInterface500 **dev;
-    (*plugin)->QueryInterface(plugin, CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID500), (LPVOID *)&dev);
+    // use IOUSBDeviceStruct320 for support on MacOS 10.6.
+    (*plugin)->QueryInterface(plugin, CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID320), (LPVOID *)&_dev);
     
     (*plugin)->Release(plugin);
+    plugin = NULL;
     
-    UInt32 deviceId;
-    (*dev)->GetLocationID(dev, &deviceId);
-    NSLog(@"device location id %d", deviceId);
+
+    // If its useful, the deviceId can be used to track controllers through
+    // reconnections.
+//    UInt32 deviceId;
+//    (*_dev)->GetLocationID(_dev, &deviceId);
+//    NSLog(@"device location id %d", deviceId);
     
-    kr = (*dev)->USBDeviceOpen(dev);
+    // Open the device and configure it.
+    kr = (*_dev)->USBDeviceOpen(_dev);
     assert(kr == KERN_SUCCESS);
     
-    UInt8 config, numConfig = 0;
-    (*dev)->GetConfiguration(dev, &config);
-    NSLog(@"set to Configuration %d", config);
-    kr = (*dev)->GetNumberOfConfigurations(dev, &numConfig);
-    assert(numConfig >= 1);
-    NSLog(@"out of %d", numConfig);
+    // Xbox controllers have one configuration option which has configuration value 1.
+    // I could check that the device has the configuration value, but I may as well
+    // just try and set it and fail out if it couldn't be configured.
+//    UInt8 config, numConfig = 0;
+//    kr = (*dev)->GetConfiguration(dev, &config);
+//    assert(kr == KERN_SUCCESS);
+//    NSLog(@"set to Configuration %d", config);
+//    kr = (*dev)->GetNumberOfConfigurations(dev, &numConfig);
+//    assert(numConfig >= 1);
+//    assert(kr == KERN_SUCCESS);
     
     IOUSBConfigurationDescriptorPtr configDesc;
-    (*dev)->GetConfigurationDescriptorPtr(dev, 0, &configDesc);
-    (*dev)->SetConfiguration(dev, configDesc->bConfigurationValue);
+    kr = (*_dev)->GetConfigurationDescriptorPtr(_dev, 0, &configDesc);
+    assert(kr == KERN_SUCCESS);
+    kr = (*_dev)->SetConfiguration(_dev, configDesc->bConfigurationValue);
+    assert(kr == KERN_SUCCESS);
     
+    // The device has 4 interfaces. They are used as follows:
+    // Protocol 1:
+    //  - Endpoint 1 (in) : Controller events, including button presses.
+    //  - Endpoint 2 (out): Rumble pack and LED control
+    // Protocol 2 has a single endpoint to read from a connected chatpad
+    // Protocol 3 is used by a headset
+    // The device also has an interface on subclass 253, protocol 10 with no endpoints.
+    // It is unused.
     
+    // For now, we just care about the two endpoints on protocol 1.
+    // For more detail, see https://github.com/Grumbel/xboxdrv/blob/master/PROTOCOL
     IOUSBFindInterfaceRequest req;
-    req.bInterfaceClass = req.bInterfaceSubClass = req.bInterfaceProtocol = req.bAlternateSetting = kIOUSBFindInterfaceDontCare;
+    req.bInterfaceClass = 255;
+    req.bInterfaceSubClass = 93;
+    req.bInterfaceProtocol = 1;
+    req.bAlternateSetting = kIOUSBFindInterfaceDontCare;
     
     io_iterator_t iter;
-    (*dev)->CreateInterfaceIterator(dev, &req, &iter);
+    kr = (*_dev)->CreateInterfaceIterator(_dev, &req, &iter);
+    assert(kr == KERN_SUCCESS);
     
-    io_service_t usbInterface;
-    while ((usbInterface = IOIteratorNext(iter))) {
-      IOCFPlugInInterface **pluginInterface;
-      kr = IOCreatePlugInInterfaceForService(usbInterface, kIOUSBInterfaceUserClientTypeID, kIOCFPlugInInterfaceID, &pluginInterface, &score);
-      assert(kr == KERN_SUCCESS);
-      
+    // There should be exactly one usb interface which matches the requested settings.
+    io_service_t usbInterface = IOIteratorNext(iter);
+    assert(usbInterface);
+    
+    // We need to make an InterfaceInterface to communicate with the device endpoint.
+    // This is the same process as earlier - first make a PluginInterface from the io_service
+    // then make the InterfaceInterface from that.
+    
+    IOCFPlugInInterface **pluginInterface;
+    kr = IOCreatePlugInInterfaceForService(usbInterface, kIOUSBInterfaceUserClientTypeID, kIOCFPlugInInterfaceID, &pluginInterface, &score);
+    assert(kr == KERN_SUCCESS);
+    
+    // Release the usb interface, and any subsequent interfaces returned by the iterator, if any.
+    // (There shouldn't be any, but I don't want a future device to cause memory leaks.)
+    do {
       IOObjectRelease(usbInterface);
-      
-      IOUSBInterfaceInterface550 **interf;
-      (*pluginInterface)->QueryInterface(pluginInterface, CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID550), (LPVOID *)&interf);
-      
-      (*pluginInterface)->Release(pluginInterface);
-      
-      // p = 1: buttons, LEDs and rumble pack.
-      // p = 2: chatpad
-      // p = 3: ????
-      UInt8 c, sc, p;
-      (*interf)->GetInterfaceClass(interf, &c);
-      (*interf)->GetInterfaceSubClass(interf, &sc);
-      (*interf)->GetInterfaceProtocol(interf, &p);
-      NSLog(@"interf class:%d, subclass:%d, protocol:%d", c, sc, p);
-      
-//      if (p != 1) continue;
-      // Actually open the interface.
-      kr = (*interf)->USBInterfaceOpen(interf);
-      assert(kr == KERN_SUCCESS);
-
-      UInt8 numEndpoints;
-      kr = (*interf)->GetNumEndpoints(interf, &numEndpoints);
-      assert(kr == KERN_SUCCESS);
+    } while ((usbInterface = IOIteratorNext(iter)));
     
-      NSLog(@"interface has %d endpoints", numEndpoints);
+    // Actually create the interface.
+    kr = (*pluginInterface)->QueryInterface(pluginInterface, CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID300), (LPVOID *)&_interf);
+    
+    (*pluginInterface)->Release(pluginInterface);
+    
+    // Actually open the interface.
+    kr = (*_interf)->USBInterfaceOpen(_interf);
+    assert(kr == KERN_SUCCESS);
+
+    CFRunLoopSourceRef source;
+    kr = (*_interf)->CreateInterfaceAsyncEventSource(_interf, &source);
+    assert(kr == KERN_SUCCESS);
+    CFRunLoopAddSource(CFRunLoopGetCurrent(), source, kCFRunLoopDefaultMode);
+    
+    // The interface should have two pipes. Pipe 1 with direction kUSBIn and pipe 2 with direction
+    // kUSBOut. Both pipes should have type kUSBInterrupt.
+    UInt8 numEndpoints;
+    kr = (*_interf)->GetNumEndpoints(_interf, &numEndpoints);
+    assert(kr == KERN_SUCCESS);
+    assert(numEndpoints == 2);
+    
+    for (int i = 1; i <= numEndpoints; i++) {
+      UInt8 direction;
+      UInt8 number;
+      UInt8 transferType;
+      UInt16 maxPacketSize;
+      UInt8 interval;
       
-      CFRunLoopSourceRef source;
-      kr = (*interf)->CreateInterfaceAsyncEventSource(interf, &source);
-      assert(kr == KERN_SUCCESS);
-      CFRunLoopAddSource(CFRunLoopGetCurrent(), source, kCFRunLoopDefaultMode);
+      kr = (*_interf)->GetPipeProperties(_interf,
+                                        i, &direction,
+                                        &number, &transferType,
+                                        &maxPacketSize, &interval);
       
-      for (int i = 1; i <= numEndpoints; i++) {
-        UInt8 direction;
-        UInt8 number;
-        UInt8 transferType;
-        UInt16 maxPacketSize;
-        UInt8 interval;
+      assert(transferType == kUSBInterrupt);
+      if (i == 1) {
+        assert(direction == kUSBIn);
         
-        kr = (*interf)->GetPipeProperties(interf,
-                                          i, &direction,
-                                          &number, &transferType,
-                                          &maxPacketSize, &interval);
-        NSLog(@"pipe %d direction %d type %d size %d", i, direction, transferType, maxPacketSize);
+        Transfer *xfer = malloc(sizeof(Transfer) + maxPacketSize);
+        xfer->owner = self;
+        xfer->interf = _interf;
+        xfer->pipe = i;
+        xfer->maxPacketSize = maxPacketSize;
+        (*_interf)->ReadPipeAsync(_interf, i, xfer->bytes, maxPacketSize, gotData, xfer);
+
+      } else if (i == 2) {
+        assert(direction == kUSBOut);
+        NSLog(@"Writing control bytes");
+        char buf2[]={0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // large, small
+        (*_interf)->WritePipe(_interf, i, buf2, sizeof(buf2));
         
-        if (direction == kUSBIn) {
-//          IOReturn (*ReadPipeAsync)(void *self, UInt8 pipeRef, void *buf, UInt32 size, IOAsyncCallback1 callback, void *refcon);
-
-          Transfer *xfer = malloc(sizeof(Transfer) + maxPacketSize);
-          xfer->owner = self;
-          xfer->interf = interf;
-          xfer->pipe = i;
-          xfer->maxPacketSize = maxPacketSize;
-          (*interf)->ReadPipeAsync(interf, i, xfer->bytes, maxPacketSize, gotData, xfer);
-        } else if (direction == kUSBOut) {
-          
-          if (p == 1 && i == 2) {
-            NSLog(@"Writing control bytes");
-            char buf2[]={0x00, 0x08, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00}; // large, small
-            (*interf)->WritePipe(interf, i, buf2, sizeof(buf2));
-
-            char buf[]={0x01,0x03, 0x0a}; // 0xa = rotating
-            (*interf)->WritePipe(interf, i, buf, sizeof(buf));
-            
-
-          }
-        }
-//        kUSBOut
+        char buf[]={0x01,0x03, 0x0a}; // 0xa = rotating
+        (*_interf)->WritePipe(_interf, i, buf, sizeof(buf));
       }
     }
-    
-    
-//    IOServiceAddInterestNotification
-    
   }
   return self;
 }
