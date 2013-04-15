@@ -41,25 +41,25 @@ typedef enum {
 
 struct XBOXButtonData {
   // 00 back start - 0000
-  int dpadUp :1;
-  int dpadDown :1;
-  int dpadLeft :1;
-  int dpadRight :1;
+  UInt8 dpadUp :1;
+  UInt8 dpadDown :1;
+  UInt8 dpadLeft :1;
+  UInt8 dpadRight :1;
   
-  int start :1;
-  int back :1;
-  int stickLeftClick :1;
-  int stickRightClick :1;
+  UInt8 start :1;
+  UInt8 back :1;
+  UInt8 stickLeftClick :1;
+  UInt8 stickRightClick :1;
   
-  int bumperLeft :1;
-  int bumperRight :1;
-  int xboxButton :1;
-  int unused :1;
+  UInt8 bumperLeft :1;
+  UInt8 bumperRight :1;
+  UInt8 xboxButton :1;
+  UInt8 unused :1;
   
-  int a :1;
-  int b :1;
-  int x :1;
-  int y :1;
+  UInt8 a :1;
+  UInt8 b :1;
+  UInt8 x :1;
+  UInt8 y :1;
   
   UInt8 triggerLeft :8;
   UInt8 triggerRight :8;
@@ -106,8 +106,10 @@ static void normalizeXBoxAxis(SInt16 x, SInt16 y, SInt16 deadzone, float *x_out,
 //    normalizedMagnitude = magnitude / (32767 - INPUT_DEADZONE);
     float ratio = (magnitude / (32767 - deadzone)) / realMagnitude;
     
+    // Y is negated because xbox controllers have an opposite sign from
+    // the 'standard controller' recommendations.
     *x_out = LX * ratio;
-    *y_out = LY * ratio;
+    *y_out = -LY * ratio;
   }
   else //if the controller is in the deadzone zero out the magnitude
   {
@@ -141,7 +143,6 @@ StandardGamepadData standardize360Data(XBOXButtonData xbox) {
   
   data.button[BUTTON_CENTER] = xbox.xboxButton;
   
-  
   normalizeXBoxAxis(xbox.stickLeftX, xbox.stickLeftY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE,
                     &data.axis[AXIS_LEFT_X], &data.axis[AXIS_LEFT_Y]);
   normalizeXBoxAxis(xbox.stickRightX, xbox.stickRightY, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE,
@@ -153,6 +154,7 @@ StandardGamepadData standardize360Data(XBOXButtonData xbox) {
 @implementation Gamepad
 
 @dynamic ledPattern;
+@synthesize delegate;
 
 - (void)readPacketOfLength:(UInt32)length {
   if (length < 2) return;

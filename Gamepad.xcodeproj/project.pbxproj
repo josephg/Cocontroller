@@ -15,6 +15,7 @@
 		FD0213C8170FB7360059D41E /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = FD0213C6170FB7360059D41E /* MainMenu.xib */; };
 		FD0213D0170FB76A0059D41E /* GamepadWatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = FD0213CF170FB76A0059D41E /* GamepadWatcher.m */; };
 		FD0213D2170FB8900059D41E /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FD0213D1170FB8900059D41E /* IOKit.framework */; };
+		FD6C3410171BB80700B59C66 /* stdcontroller.png in Resources */ = {isa = PBXBuildFile; fileRef = FD6C340F171BB80700B59C66 /* stdcontroller.png */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +36,7 @@
 		FD0213CF170FB76A0059D41E /* GamepadWatcher.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GamepadWatcher.m; sourceTree = "<group>"; };
 		FD0213D1170FB8900059D41E /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOKit.framework; path = System/Library/Frameworks/IOKit.framework; sourceTree = SDKROOT; };
 		FD6C340E171BA9D300B59C66 /* StandardGamepad.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = StandardGamepad.h; sourceTree = "<group>"; };
+		FD6C340F171BB80700B59C66 /* stdcontroller.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = stdcontroller.png; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -96,6 +98,7 @@
 				FD0213CF170FB76A0059D41E /* GamepadWatcher.m */,
 				FD6C340E171BA9D300B59C66 /* StandardGamepad.h */,
 				FD0213C6170FB7360059D41E /* MainMenu.xib */,
+				FD6C340F171BB80700B59C66 /* stdcontroller.png */,
 				FD0213B8170FB7360059D41E /* Supporting Files */,
 			);
 			path = Gamepad;
@@ -166,6 +169,7 @@
 				FD0213BC170FB7360059D41E /* InfoPlist.strings in Resources */,
 				FD0213C2170FB7360059D41E /* Credits.rtf in Resources */,
 				FD0213C8170FB7360059D41E /* MainMenu.xib in Resources */,
+				FD6C3410171BB80700B59C66 /* stdcontroller.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

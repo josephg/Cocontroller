@@ -75,6 +75,8 @@ typedef enum {
   XBOXLedPattern _ledPattern;
 }
 
+@property (assign) id delegate;
+
 // The location ID is a 32 bit number which is unique among all USB devices in the
 // system, and which will not change on a system reboot unless the topology of the
 // bus itself changes.
@@ -102,7 +104,7 @@ typedef enum {
   NSMutableArray *gamepads;
 }
 
-@property (nonatomic, retain) id delegate;
+@property (assign) id delegate;
 
 - (void)listen;
 
