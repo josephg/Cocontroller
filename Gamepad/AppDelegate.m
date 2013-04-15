@@ -43,6 +43,20 @@
   
   [b11 setFrameOrigin:NSMakePoint(rightStick.x + data.axis[AXIS_RIGHT_X] * amt,
                                   rightStick.y - data.axis[AXIS_RIGHT_Y] * amt)];
+  
+  [gamepad setRumbleLarge:data.button[BUTTON_TRIGGER_LEFT] * 255 small:data.button[BUTTON_TRIGGER_RIGHT] * 255];
+  
+  if (data.button[0] && !prevData.button[0]) {
+    // button 0 pressed.
+    gamepad.ledPattern = (gamepad.ledPattern + 1) % XBOX_LED_NUM_PATTERNS;
+    NSLog(@"advanced to %d", gamepad.ledPattern);
+  }
+  
+  prevData = data;
+}
+
+- (void)gamepad:(Gamepad *)gamepad ledStatusKnown:(XBOXLedPattern)pattern {
+  NSLog(@"pattern %d", pattern);
 }
 
 - (void)gamepadDidConnect:(Gamepad *)g {
@@ -58,6 +72,7 @@
   leftStick = NSPointFromCGPoint([b10 frame].origin);
   rightStick = NSPointFromCGPoint([b11 frame].origin);
 
+  prevData = (StandardGamepadData){};
 }
 
 @end

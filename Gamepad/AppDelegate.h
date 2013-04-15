@@ -32,6 +32,8 @@
   
   NSPoint leftStick;
   NSPoint rightStick;
+  
+  StandardGamepadData prevData;
 }
 
 @property (assign) IBOutlet NSWindow *window;

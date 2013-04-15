@@ -227,7 +227,7 @@ static void gotData(void *refcon, IOReturn result, void *arg0) {
 - (id)initWithService:(io_service_t)service {
   self = [super init];
   if (self) {
-    NSLog(@"init gamepad %d", service);
+    _ledPattern = XBOX_LED_NUM_PATTERNS;
     
     kern_return_t kr;
     

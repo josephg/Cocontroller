@@ -44,6 +44,8 @@ typedef enum {
   
   // Flash all LEDs once then go black.
   XBOX_LED_FLASH_ONCE = 15,
+  
+  XBOX_LED_NUM_PATTERNS
 } XBOXLedPattern;
 
 @class Gamepad;
