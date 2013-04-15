@@ -192,9 +192,13 @@ StandardGamepadData standardize360Data(XBOXButtonData xbox) {
       break;
     }
     case STATUS_MESSAGE_LED:
-      _ledPattern = _read_buffer[2];
-      if ([delegate respondsToSelector:@selector(gamepad:ledStatusKnown:)]) {
-        [delegate gamepad:self ledStatusKnown:_ledPattern];
+      NSLog(@"led reports %d", _read_buffer[2]);
+      // We get one of these messages every time the LED pattern is set as well.
+      if (_ledPattern == XBOX_LED_NUM_PATTERNS) {
+        _ledPattern = _read_buffer[2];
+        if ([delegate respondsToSelector:@selector(gamepad:ledStatusKnown:)]) {
+          [delegate gamepad:self ledStatusKnown:_ledPattern];
+        }
       }
       break;
       
