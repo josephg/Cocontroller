@@ -14,32 +14,71 @@
 #import <IOKit/usb/IOUSBLib.h>
 #import <IOKit/usb/USB.h>
 
+#define READ_ENDPOINT 1
+#define CONTROL_ENDPOINT 2
+
+typedef enum {
+  CONTROL_MESSAGE_SET_RUMBLE = 0,
+  CONTROL_MESSAGE_SET_LED = 1,
+} XBOXControlMessageType;
+
+
+typedef enum {
+  STATUS_MESSAGE_BUTTONS = 0,
+  STATUS_MESSAGE_LED = 1,
+  STATUS_MESSAGE_UNKNOWN = 2,
+  
+  // Apparently this message tells you if the rumble pack is disabled in the controller. If
+  // the rumble pack is disabled, vibration control messages have no effect.
+  STATUS_MESSAGE_RUMBLE = 3,
+} XBOXStatusMessageType;
+
 @implementation Gamepad
 
+@dynamic ledPattern;
+
 - (void)processBytes:(char *)bytes ofLength:(UInt32)length {
-  UInt8 type = bytes[0];
+  XBOXStatusMessageType type = bytes[0];
   UInt8 len = bytes[1];
   
-  if (type != 0) {
-
-    printf("weird packet: ");
-    for (int i = 0; i < length; i++) {
-      printf("%2x ", (unsigned char)bytes[i]);
-    }
-    printf("\n");
-
-    // I don't understand what its talking about. Ignore the packet.
-    return;
+  switch (type) {
+    case STATUS_MESSAGE_BUTTONS:
+      for (int i = 2; i < length; i++) {
+        printf("%2x ", (unsigned char)bytes[i]);
+      }
+      printf("\n");
+      break;
+    case STATUS_MESSAGE_LED:
+      _ledPattern = bytes[2];
+      if (delegate && [delegate respondsToSelector:@selector(gamepad:ledStatusKnown:)]) {
+        [delegate gamepad:self ledStatusKnown:_ledPattern];
+      }
+      break;
+      
+    default:
+      // Ignore!
+      break;
   }
-  if (len != 20 || length != 20) {
-    NSLog(@"Er, weird length. Ignoring.");
-    return;
-  }
-  
-  for (int i = 2; i < length; i++) {
-    printf("%2x ", (unsigned char)bytes[i]);
-  }
-  printf("\n");
+//  if (type != 0) {
+//
+//    printf("weird packet: ");
+//    for (int i = 0; i < length; i++) {
+//      printf("%2x ", (unsigned char)bytes[i]);
+//    }
+//    printf("\n");
+//
+//    // I don't understand what its talking about. Ignore the packet.
+//    return;
+//  }
+//  if (len != 20 || length != 20) {
+//    NSLog(@"Er, weird length. Ignoring.");
+//    return;
+//  }
+//  
+//  for (int i = 2; i < length; i++) {
+//    printf("%2x ", (unsigned char)bytes[i]);
+//  }
+//  printf("\n");
 }
 
 typedef struct {
@@ -50,19 +89,9 @@ typedef struct {
   char bytes[];
 } Transfer;
 
-void gotData(void *refcon, IOReturn result, void *arg0) {
+static void gotData(void *refcon, IOReturn result, void *arg0) {
   UInt32 bytesRead = (UInt32)arg0;
   Transfer *xfer = (Transfer *)refcon;
-
-//  UInt8 c, sc, p;
-//  IOUSBInterfaceInterface300 **interf = xfer->interf;
-//  (*interf)->GetInterfaceClass(interf, &c);
-//  (*interf)->GetInterfaceSubClass(interf, &sc);
-//  (*interf)->GetInterfaceProtocol(interf, &p);
-//  
-//  printf("data from pipe %d class %d subclass %d protocol %d", xfer->pipe, c, sc, p);
-  
-
   
   if (result != kIOReturnSuccess) return;
   [xfer->owner processBytes:xfer->bytes ofLength:bytesRead];
@@ -77,13 +106,6 @@ void gotData(void *refcon, IOReturn result, void *arg0) {
     NSLog(@"init gamepad %d", service);
     
     kern_return_t kr;
-    
-    // name is 'Controller'
-//    io_name_t name;
-//    kr = IORegistryEntryGetName(service, name);
-//    if (kr != KERN_SUCCESS) name[0] = '\0';
-//    
-//    NSLog(@"name: %s", name);
     
     // First we need to make a PlugInInterface, which we can use in turn to get the DeviceInterface.
     IOCFPlugInInterface **plugin;
@@ -100,13 +122,6 @@ void gotData(void *refcon, IOReturn result, void *arg0) {
     (*plugin)->Release(plugin);
     plugin = NULL;
     
-
-    // If its useful, the deviceId can be used to track controllers through
-    // reconnections.
-//    UInt32 deviceId;
-//    (*_dev)->GetLocationID(_dev, &deviceId);
-//    NSLog(@"device location id %d", deviceId);
-    
     // Open the device and configure it.
     kr = (*_dev)->USBDeviceOpen(_dev);
     assert(kr == KERN_SUCCESS);
@@ -114,14 +129,6 @@ void gotData(void *refcon, IOReturn result, void *arg0) {
     // Xbox controllers have one configuration option which has configuration value 1.
     // I could check that the device has the configuration value, but I may as well
     // just try and set it and fail out if it couldn't be configured.
-//    UInt8 config, numConfig = 0;
-//    kr = (*dev)->GetConfiguration(dev, &config);
-//    assert(kr == KERN_SUCCESS);
-//    NSLog(@"set to Configuration %d", config);
-//    kr = (*dev)->GetNumberOfConfigurations(dev, &numConfig);
-//    assert(numConfig >= 1);
-//    assert(kr == KERN_SUCCESS);
-    
     IOUSBConfigurationDescriptorPtr configDesc;
     kr = (*_dev)->GetConfigurationDescriptorPtr(_dev, 0, &configDesc);
     assert(kr == KERN_SUCCESS);
@@ -201,7 +208,7 @@ void gotData(void *refcon, IOReturn result, void *arg0) {
                                         &maxPacketSize, &interval);
       
       assert(transferType == kUSBInterrupt);
-      if (i == 1) {
+      if (i == READ_ENDPOINT) {
         assert(direction == kUSBIn);
         
         Transfer *xfer = malloc(sizeof(Transfer) + maxPacketSize);
@@ -211,18 +218,78 @@ void gotData(void *refcon, IOReturn result, void *arg0) {
         xfer->maxPacketSize = maxPacketSize;
         (*_interf)->ReadPipeAsync(_interf, i, xfer->bytes, maxPacketSize, gotData, xfer);
 
-      } else if (i == 2) {
+      } else if (i == CONTROL_ENDPOINT) {
         assert(direction == kUSBOut);
-        NSLog(@"Writing control bytes");
-        char buf2[]={0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // large, small
-        (*_interf)->WritePipe(_interf, i, buf2, sizeof(buf2));
-        
-        char buf[]={0x01,0x03, 0x0a}; // 0xa = rotating
-        (*_interf)->WritePipe(_interf, i, buf, sizeof(buf));
+        self.ledPattern = XBOX_LED_ALTERNATE_PATTERN;
       }
     }
   }
   return self;
+}
+
+- (void)dealloc {
+  (*_interf)->Release(_interf);
+  (*_dev)->Release(_dev);
+  [super dealloc];
+}
+
+- (UInt32)getLocationId {
+  // If its useful, the deviceId can be used to track controllers through
+  // reconnections.
+  UInt32 deviceId;
+  IOReturn kr = (*_dev)->GetLocationID(_dev, &deviceId);
+  if (kr != KERN_SUCCESS) return UINT32_MAX;
+  
+  return deviceId;
+}
+
+// The callback for writing data. Currently I don't really care about this, because
+// its not like you care precicely when the controller started rumbling.
+// arg0 contains the number of bytes written in this packet.
+static void writeCallback(void *buffer, IOReturn result, void *arg0) {
+  // Ignoring any errors sending data, because they will usually only occur when the
+  // device is disconnected, in which case it really doesn't matter if the data got to the
+  // controller or not.
+  if (result != KERN_SUCCESS) {
+//    NSLog(@"Error writing data");
+  }
+  
+  free(buffer);
+}
+
+// Asynchronously write a message to the device's control interface.
+- (void)sendControlMessage:(XBOXControlMessageType)message withBytes:(UInt8 *)bytes ofLength:(UInt32)payloadLength {
+  // Its a bit wasteful allocating a buffer here. In theory, we could simply allocate a buffer in
+  // the Gamepad class and reuse it with each writeBytes call. However, there are two problems with
+  // that approach
+  //  - Multiple calls to writeBytes would need to be queued, else a subsequent call would clobber
+  //    the data sent in the first WritePipeAsync call
+  //  - If a message is queued right before the gamepad object is deallocated, the buffer could not
+  //    be deallocated.
+  // Given there shouldn't be more than a few control packets per second, its simplest to just copy
+  // the bytes here.
+  UInt8 length = payloadLength + 2;
+  UInt8 *buffer = malloc(length);
+  buffer[0] = (UInt8)message;
+  buffer[1] = length;
+  memcpy(&buffer[2], bytes, payloadLength);
+  (*_interf)->WritePipeAsync(_interf, CONTROL_ENDPOINT, buffer, (UInt32)length,
+                             writeCallback, buffer);
+}
+
+- (XBOXLedPattern)ledPattern {
+  return _ledPattern;
+}
+
+- (void)setLedPattern:(XBOXLedPattern)pattern {
+  UInt8 buf[]={(UInt8)pattern};
+  [self sendControlMessage:CONTROL_MESSAGE_SET_LED withBytes:buf ofLength:sizeof(buf)];
+  _ledPattern = pattern;
+}
+
+- (void)setRumbleLarge:(UInt8)large small:(UInt8)small {
+  UInt8 buf[]={0x00, large, small, 0x00, 0x00, 0x00};
+  [self sendControlMessage:CONTROL_MESSAGE_SET_RUMBLE withBytes:buf ofLength:sizeof(buf)];
 }
 
 @end
